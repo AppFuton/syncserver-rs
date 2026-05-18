@@ -1,2 +1,3 @@
-# syncserver-rs
-User data synchronization server built with rust for Futon
+## syncserver-rs
+
+User data synchronization server for Futon
