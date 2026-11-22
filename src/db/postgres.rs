@@ -249,7 +249,7 @@ impl Repository for PostgresRepository {
         let items = match since {
             Some(since_ms) => {
                 sqlx::query_as::<_, VaultItem>(
-                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = $1 AND updated_at > $2 ORDER BY updated_at ASC"
+                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = $1 AND updated_at > $2 ORDER BY updated_at ASC, id ASC"
                 )
                 .bind(user_id)
                 .bind(since_ms)
@@ -258,7 +258,7 @@ impl Repository for PostgresRepository {
             }
             None => {
                 sqlx::query_as::<_, VaultItem>(
-                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = $1 ORDER BY updated_at ASC"
+                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = $1 ORDER BY updated_at ASC, id ASC"
                 )
                 .bind(user_id)
                 .fetch_all(&self.pool)

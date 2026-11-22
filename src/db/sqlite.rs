@@ -21,6 +21,8 @@ impl SqliteRepository {
         let options = SqliteConnectOptions::from_str(database_url)
             .map_err(|e| AppError::Internal(format!("Invalid SQLite database URL: {e}")))?
             .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .busy_timeout(std::time::Duration::from_secs(5))
             .foreign_keys(true);
 
         let pool = SqlitePoolOptions::new()
@@ -275,7 +277,7 @@ impl Repository for SqliteRepository {
         let items = match since {
             Some(since_ms) => {
                 sqlx::query_as::<_, VaultItem>(
-                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = ? AND updated_at > ? ORDER BY updated_at ASC"
+                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = ? AND updated_at > ? ORDER BY updated_at ASC, id ASC"
                 )
                 .bind(user_id)
                 .bind(since_ms)
@@ -284,7 +286,7 @@ impl Repository for SqliteRepository {
             }
             None => {
                 sqlx::query_as::<_, VaultItem>(
-                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = ? ORDER BY updated_at ASC"
+                    "SELECT id, user_id, encrypted_payload, version, deleted_at, created_at, updated_at FROM vault_items WHERE user_id = ? ORDER BY updated_at ASC, id ASC"
                 )
                 .bind(user_id)
                 .fetch_all(&self.pool)

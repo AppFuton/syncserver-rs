@@ -268,3 +268,77 @@ async fn test_sqlite_vault_items_sync() {
     assert_eq!(delta[0].created_at, 1000);
     assert_eq!(delta[0].updated_at, 2000);
 }
+
+#[tokio::test]
+async fn test_sqlite_file_repository_and_deterministic_sorting() {
+    let temp_dir = std::env::temp_dir();
+    let db_path = temp_dir.join(format!("test_syncserver_{}.db", uuid::Uuid::new_v4()));
+    let db_url = format!("sqlite://{}", db_path.to_str().unwrap());
+
+    let repo = SqliteRepository::new(&db_url).await.unwrap();
+
+    // Verify WAL journal mode and busy timeout
+    let journal_mode: (String,) = sqlx::query_as("PRAGMA journal_mode")
+        .fetch_one(repo.pool())
+        .await
+        .unwrap();
+    assert_eq!(journal_mode.0.to_lowercase(), "wal");
+
+    let busy_timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+        .fetch_one(repo.pool())
+        .await
+        .unwrap();
+    assert_eq!(busy_timeout.0, 5000);
+
+    // Verify deterministic sorting by (updated_at ASC, id ASC)
+    let user = repo
+        .create_user(&NewUser {
+            id: Some("user-sort-test".to_string()),
+            email: "sort@example.com".to_string(),
+            server_password_hash: hash_password("pass").unwrap(),
+            kdf_salt: "salt".to_string(),
+            kdf_memory_kb: 65536,
+            kdf_iterations: 3,
+            kdf_parallelism: 1,
+            wrapped_vault_key: "wrapped".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let items = vec![
+        VaultItemUpsert {
+            id: "charlie".to_string(),
+            encrypted_payload: "p-c".to_string(),
+            deleted_at: None,
+        },
+        VaultItemUpsert {
+            id: "alpha".to_string(),
+            encrypted_payload: "p-a".to_string(),
+            deleted_at: None,
+        },
+        VaultItemUpsert {
+            id: "bravo".to_string(),
+            encrypted_payload: "p-b".to_string(),
+            deleted_at: None,
+        },
+    ];
+
+    repo.upsert_vault_items(&user.id, &items, 5000)
+        .await
+        .unwrap();
+
+    // Query all items - should be sorted alpha, bravo, charlie
+    let fetched = repo.get_vault_items(&user.id, None).await.unwrap();
+    let ids: Vec<&str> = fetched.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, vec!["alpha", "bravo", "charlie"]);
+
+    // Query since 4000 - should also be sorted alpha, bravo, charlie
+    let fetched_since = repo.get_vault_items(&user.id, Some(4000)).await.unwrap();
+    let ids_since: Vec<&str> = fetched_since.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids_since, vec!["alpha", "bravo", "charlie"]);
+
+    // Clean up temporary database files
+    let _ = std::fs::remove_file(&db_path);
+    let _ = std::fs::remove_file(format!("{}-wal", db_path.to_str().unwrap()));
+    let _ = std::fs::remove_file(format!("{}-shm", db_path.to_str().unwrap()));
+}
