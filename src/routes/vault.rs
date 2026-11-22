@@ -77,20 +77,18 @@ pub async fn get_vault_sync_handler(
     auth_user: AuthUser,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let meta = state
-        .repo
-        .get_vault_snapshot_meta(&auth_user.user_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-
-    let etag_value = format!("\"{}\"", meta.version);
-
     if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
+        let meta = state
+            .repo
+            .get_vault_snapshot_meta(&auth_user.user_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
         if let Ok(val) = if_none_match.to_str() {
             if matches_etag(val, meta.version) {
                 return Response::builder()
                     .status(StatusCode::NOT_MODIFIED)
-                    .header(header::ETAG, etag_value)
+                    .header(header::ETAG, format!("\"{}\"", meta.version))
                     .body(Body::empty())
                     .map_err(|e| AppError::Internal(e.to_string()));
             }
@@ -106,7 +104,7 @@ pub async fn get_vault_sync_handler(
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/octet-stream")
-        .header(header::ETAG, etag_value)
+        .header(header::ETAG, format!("\"{}\"", snapshot.version))
         .body(Body::from(snapshot.encrypted_blob))
         .map_err(|e| AppError::Internal(e.to_string()))
 }
