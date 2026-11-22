@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.DS_Store
