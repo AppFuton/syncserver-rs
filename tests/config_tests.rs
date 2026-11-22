@@ -68,6 +68,37 @@ fn test_config_missing_jwt_secret() {
 }
 
 #[test]
+fn test_config_empty_secrets() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+
+    env::set_var("SERVER_SECRET", "");
+    env::set_var("JWT_SECRET", "test_jwt_secret");
+    assert!(
+        Config::from_env().is_err(),
+        "Config should fail with empty SERVER_SECRET"
+    );
+
+    env::set_var("SERVER_SECRET", "   ");
+    assert!(
+        Config::from_env().is_err(),
+        "Config should fail with whitespace SERVER_SECRET"
+    );
+
+    env::set_var("SERVER_SECRET", "test_server_secret");
+    env::set_var("JWT_SECRET", "");
+    assert!(
+        Config::from_env().is_err(),
+        "Config should fail with empty JWT_SECRET"
+    );
+
+    env::set_var("JWT_SECRET", "   ");
+    assert!(
+        Config::from_env().is_err(),
+        "Config should fail with whitespace JWT_SECRET"
+    );
+}
+
+#[test]
 fn test_config_invalid_port() {
     let _lock = ENV_MUTEX.lock().unwrap();
 

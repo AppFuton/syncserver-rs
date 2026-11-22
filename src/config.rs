@@ -11,16 +11,26 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, AppError> {
-        let _ = dotenvy::dotenv();
-
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "sqlite://syncserver.db".to_string());
 
-        let server_secret = std::env::var("SERVER_SECRET")
-            .map_err(|_| AppError::Internal("SERVER_SECRET environment variable is required".to_string()))?;
+        let server_secret = match std::env::var("SERVER_SECRET") {
+            Ok(val) if !val.trim().is_empty() => val,
+            _ => {
+                return Err(AppError::Internal(
+                    "SERVER_SECRET environment variable is required and cannot be empty".to_string(),
+                ))
+            }
+        };
 
-        let jwt_secret = std::env::var("JWT_SECRET")
-            .map_err(|_| AppError::Internal("JWT_SECRET environment variable is required".to_string()))?;
+        let jwt_secret = match std::env::var("JWT_SECRET") {
+            Ok(val) if !val.trim().is_empty() => val,
+            _ => {
+                return Err(AppError::Internal(
+                    "JWT_SECRET environment variable is required and cannot be empty".to_string(),
+                ))
+            }
+        };
 
         let port = match std::env::var("PORT") {
             Ok(val) => val.parse::<u16>().map_err(|_| {
