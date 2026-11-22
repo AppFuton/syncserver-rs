@@ -1,9 +1,20 @@
 use std::sync::Arc;
 use syncserver_rs::config::Config;
-use syncserver_rs::db::{PostgresRepository, Repository, SqliteRepository};
 use syncserver_rs::error::AppError;
 use syncserver_rs::routes::create_router;
 use syncserver_rs::AppState;
+
+fn mask_database_url(url: &str) -> String {
+    if let Some((scheme, rest)) = url.split_once("://") {
+        if let Some((_userinfo, host_and_path)) = rest.split_once('@') {
+            format!("{scheme}://****@{host_and_path}")
+        } else {
+            url.to_string()
+        }
+    } else {
+        url.to_string()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -21,18 +32,10 @@ async fn main() -> Result<(), AppError> {
         "Starting syncserver-rs v{} on {} with db {}",
         env!("CARGO_PKG_VERSION"),
         bind_addr,
-        config.database_url
+        mask_database_url(&config.database_url)
     );
 
-    let repo: Arc<dyn Repository> = if config.database_url.starts_with("postgres://")
-        || config.database_url.starts_with("postgresql://")
-    {
-        tracing::info!("Initializing PostgreSQL repository");
-        Arc::new(PostgresRepository::new(&config.database_url).await?)
-    } else {
-        tracing::info!("Initializing SQLite repository");
-        Arc::new(SqliteRepository::new(&config.database_url).await?)
-    };
+    let repo = syncserver_rs::db::init_repository(&config.database_url).await?;
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("Listening on http://{}", bind_addr);

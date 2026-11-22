@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use async_trait::async_trait;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 use crate::crypto::normalize_email;
 use crate::db::models::{
@@ -200,6 +200,33 @@ impl Repository for SqliteRepository {
         .map_err(|e| AppError::Internal(format!("Failed to get vault snapshot: {e}")))?;
 
         Ok(snapshot)
+    }
+
+    async fn get_vault_snapshot_meta(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<VaultSnapshotMeta>, AppError> {
+        let row = sqlx::query(
+            "SELECT user_id, length(encrypted_blob), version, updated_at FROM vault_snapshots WHERE user_id = ?"
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to get vault snapshot meta: {e}")))?;
+
+        Ok(row.map(|r| {
+            let size_bytes: i64 = r
+                .try_get::<i64, _>(1)
+                .or_else(|_| r.try_get::<i32, _>(1).map(|v| v as i64))
+                .unwrap_or(0);
+            let version: i64 = r.get(2);
+            let updated_at: i64 = r.get(3);
+            VaultSnapshotMeta {
+                version,
+                updated_at,
+                size_bytes,
+            }
+        }))
     }
 
     async fn put_vault_snapshot(

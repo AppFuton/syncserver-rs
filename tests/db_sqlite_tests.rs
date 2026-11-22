@@ -122,6 +122,8 @@ async fn test_sqlite_snapshot_concurrency() {
     // 1. Initial snapshot does not exist
     let initial = repo.get_vault_snapshot(&user.id).await.unwrap();
     assert!(initial.is_none());
+    let initial_meta = repo.get_vault_snapshot_meta(&user.id).await.unwrap();
+    assert!(initial_meta.is_none());
 
     // 2. Put with expected_version Some(1) when none exists fails (PreconditionFailed)
     let err = repo
@@ -144,6 +146,15 @@ async fn test_sqlite_snapshot_concurrency() {
         .expect("Snapshot should exist");
     assert_eq!(snap1.version, 1);
     assert_eq!(snap1.encrypted_blob, b"first blob".to_vec());
+
+    let fetched_meta1 = repo
+        .get_vault_snapshot_meta(&user.id)
+        .await
+        .unwrap()
+        .expect("Snapshot meta should exist");
+    assert_eq!(fetched_meta1.version, 1);
+    assert_eq!(fetched_meta1.size_bytes, b"first blob".len() as i64);
+    assert_eq!(fetched_meta1.updated_at, snap1.updated_at);
 
     // 4. Put with stale expected_version Some(0) fails
     let stale_err = repo

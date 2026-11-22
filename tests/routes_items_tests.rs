@@ -302,6 +302,33 @@ async fn test_items_user_isolation() {
 }
 
 #[tokio::test]
+async fn test_monotonic_timestamp_generation() {
+    let config = Arc::new(Config {
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        database_url: "sqlite::memory:".to_string(),
+        server_secret: "test_server_secret_for_hmac_sha256_fake_salt_32bytes".to_string(),
+        jwt_secret: "test_jwt_secret_must_be_long_enough_12345".to_string(),
+    });
+    let repo = create_repository(&config.database_url).await.unwrap();
+    let state = AppState::new(config, repo);
+
+    let mut timestamps = Vec::with_capacity(100);
+    for _ in 0..100 {
+        timestamps.push(state.next_timestamp());
+    }
+
+    for i in 1..timestamps.len() {
+        assert!(
+            timestamps[i] > timestamps[i - 1],
+            "Timestamps must be strictly monotonic: {} <= {}",
+            timestamps[i],
+            timestamps[i - 1]
+        );
+    }
+}
+
+#[tokio::test]
 async fn test_items_body_limit_enforced() {
     let app = setup_test_app().await;
     let token = register_user(&app, "user_limit_items@example.com").await;

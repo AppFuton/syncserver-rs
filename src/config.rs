@@ -15,7 +15,14 @@ impl Config {
             .unwrap_or_else(|_| "sqlite://syncserver.db".to_string());
 
         let server_secret = match std::env::var("SERVER_SECRET") {
-            Ok(val) if !val.trim().is_empty() => val,
+            Ok(val) if !val.trim().is_empty() => {
+                if val.len() < 32 {
+                    return Err(AppError::Internal(
+                        "SERVER_SECRET must be at least 32 characters".to_string(),
+                    ));
+                }
+                val
+            }
             _ => {
                 return Err(AppError::Internal(
                     "SERVER_SECRET environment variable is required and cannot be empty".to_string(),
@@ -24,7 +31,14 @@ impl Config {
         };
 
         let jwt_secret = match std::env::var("JWT_SECRET") {
-            Ok(val) if !val.trim().is_empty() => val,
+            Ok(val) if !val.trim().is_empty() => {
+                if val.len() < 32 {
+                    return Err(AppError::Internal(
+                        "JWT_SECRET must be at least 32 characters".to_string(),
+                    ));
+                }
+                val
+            }
             _ => {
                 return Err(AppError::Internal(
                     "JWT_SECRET environment variable is required and cannot be empty".to_string(),

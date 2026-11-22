@@ -98,6 +98,30 @@ async fn test_auth_user_extractor_missing_header() {
 }
 
 #[tokio::test]
+async fn test_auth_user_extractor_case_insensitive_scheme() {
+    let secret = "test_jwt_secret_must_be_long_enough_12345";
+    let token = create_token("user-uuid-123", secret, 3600).unwrap();
+
+    let app = Router::new()
+        .route(
+            "/protected",
+            get(|auth: AuthUser| async move { auth.user_id }),
+        )
+        .with_state(secret.to_string());
+
+    for prefix in &["bearer", "BEARER", "Bearer", "BeArEr"] {
+        let req = Request::builder()
+            .uri("/protected")
+            .header(header::AUTHORIZATION, format!("{prefix} {token}"))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "Failed for prefix: {prefix}");
+    }
+}
+
+#[tokio::test]
 async fn test_auth_user_extractor_invalid_scheme() {
     let secret = "test_jwt_secret_must_be_long_enough_12345";
 
@@ -144,7 +168,7 @@ async fn test_auth_user_extractor_expired_token() {
 async fn test_auth_user_extractor_with_app_state() {
     let config = Arc::new(Config {
         database_url: "sqlite::memory:".to_string(),
-        server_secret: "server_secret_123".to_string(),
+        server_secret: "test_server_secret_must_be_32_bytes_long_123".to_string(),
         jwt_secret: "test_jwt_secret_must_be_long_enough_12345".to_string(),
         port: 8080,
         host: "127.0.0.1".to_string(),

@@ -23,6 +23,10 @@ pub trait Repository: Send + Sync {
         rotation: &PasswordRotation,
     ) -> Result<(), AppError>;
     async fn get_vault_snapshot(&self, user_id: &str) -> Result<Option<VaultSnapshot>, AppError>;
+    async fn get_vault_snapshot_meta(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<VaultSnapshotMeta>, AppError>;
     async fn put_vault_snapshot(
         &self,
         user_id: &str,

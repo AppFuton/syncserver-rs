@@ -48,11 +48,11 @@ pub async fn get_items_handler(
     auth_user: AuthUser,
     Query(params): Query<GetItemsParams>,
 ) -> Result<Json<GetItemsResponse>, AppError> {
+    let server_timestamp = chrono::Utc::now().timestamp_millis();
     let items = state
         .repo
         .get_vault_items(&auth_user.user_id, params.since)
         .await?;
-    let server_timestamp = chrono::Utc::now().timestamp_millis();
 
     Ok(Json(GetItemsResponse {
         items,
@@ -71,7 +71,7 @@ pub async fn post_items_handler(
         }
     }
 
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = state.next_timestamp();
     let synced = state
         .repo
         .upsert_vault_items(&auth_user.user_id, &payload.items, now_ms)

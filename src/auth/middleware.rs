@@ -68,15 +68,17 @@ where
             .to_str()
             .map_err(|_| AppError::Unauthorized("Invalid Authorization header".to_string()))?;
 
-        let token = if let Some(t) = auth_header.strip_prefix("Bearer ") {
-            t.trim()
-        } else if let Some(t) = auth_header.strip_prefix("bearer ") {
-            t.trim()
-        } else {
+        let (scheme, token) = auth_header
+            .split_once(' ')
+            .ok_or_else(|| AppError::Unauthorized("Invalid Authorization header format".to_string()))?;
+
+        if !scheme.eq_ignore_ascii_case("bearer") {
             return Err(AppError::Unauthorized(
                 "Invalid Authorization header format".to_string(),
             ));
-        };
+        }
+
+        let token = token.trim();
 
         if token.is_empty() {
             return Err(AppError::Unauthorized("Empty Bearer token".to_string()));

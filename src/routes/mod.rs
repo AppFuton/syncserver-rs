@@ -19,7 +19,12 @@ pub fn create_router(state: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
                 .allow_methods(tower_http::cors::Any)
-                .allow_headers(tower_http::cors::Any),
+                .allow_headers(tower_http::cors::Any)
+                .expose_headers([
+                    axum::http::header::ETAG,
+                    axum::http::header::IF_MATCH,
+                    axum::http::header::IF_NONE_MATCH,
+                ]),
         )
         .layer(TraceLayer::new_for_http())
         .with_state(state)

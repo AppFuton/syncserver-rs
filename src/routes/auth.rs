@@ -173,6 +173,9 @@ pub async fn register_handler(
             "wrapped_vault_key cannot be empty".to_string(),
         ));
     }
+    if payload.kdf_memory_kb < 1024 || payload.kdf_iterations < 1 || payload.kdf_parallelism < 1 {
+        return Err(AppError::BadRequest("Invalid KDF parameters".to_string()));
+    }
 
     let server_password_hash = hash_password(&payload.client_auth_key)?;
     let new_user = NewUser {
@@ -280,6 +283,12 @@ pub async fn rotate_password_handler(
         return Err(AppError::BadRequest(
             "Required fields cannot be empty".to_string(),
         ));
+    }
+    if payload.new_kdf_memory_kb < 1024
+        || payload.new_kdf_iterations < 1
+        || payload.new_kdf_parallelism < 1
+    {
+        return Err(AppError::BadRequest("Invalid KDF parameters".to_string()));
     }
 
     let rotation = PasswordRotation {

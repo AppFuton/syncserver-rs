@@ -9,7 +9,7 @@ static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 #[test]
 fn test_config_from_env_defaults() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
     env::remove_var("DATABASE_URL");
     env::remove_var("PORT");
@@ -28,29 +28,29 @@ fn test_config_from_env_defaults() {
 
 #[test]
 fn test_config_custom_values() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
     env::set_var("DATABASE_URL", "postgres://postgres:secret@localhost:5432/sync");
     env::set_var("PORT", "9090");
     env::set_var("HOST", "127.0.0.1");
-    env::set_var("SERVER_SECRET", "custom_server_secret_1234567890");
-    env::set_var("JWT_SECRET", "custom_jwt_secret_1234567890");
+    env::set_var("SERVER_SECRET", "custom_server_secret_1234567890_32bytes");
+    env::set_var("JWT_SECRET", "custom_jwt_secret_1234567890_32bytes");
 
     let config = Config::from_env().expect("Config::from_env should succeed with custom vars");
 
     assert_eq!(config.port, 9090);
     assert_eq!(config.host, "127.0.0.1");
     assert_eq!(config.database_url, "postgres://postgres:secret@localhost:5432/sync");
-    assert_eq!(config.server_secret, "custom_server_secret_1234567890");
-    assert_eq!(config.jwt_secret, "custom_jwt_secret_1234567890");
+    assert_eq!(config.server_secret, "custom_server_secret_1234567890_32bytes");
+    assert_eq!(config.jwt_secret, "custom_jwt_secret_1234567890_32bytes");
 }
 
 #[test]
 fn test_config_missing_server_secret() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
     env::remove_var("SERVER_SECRET");
-    env::set_var("JWT_SECRET", "test_jwt_secret");
+    env::set_var("JWT_SECRET", "test_jwt_secret_32_bytes_minimum_val");
 
     let result = Config::from_env();
     assert!(result.is_err(), "Config should fail without SERVER_SECRET");
@@ -58,9 +58,9 @@ fn test_config_missing_server_secret() {
 
 #[test]
 fn test_config_missing_jwt_secret() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
-    env::set_var("SERVER_SECRET", "test_server_secret");
+    env::set_var("SERVER_SECRET", "test_secret_32_bytes_long_minimum_val");
     env::remove_var("JWT_SECRET");
 
     let result = Config::from_env();
@@ -69,10 +69,10 @@ fn test_config_missing_jwt_secret() {
 
 #[test]
 fn test_config_empty_secrets() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
     env::set_var("SERVER_SECRET", "");
-    env::set_var("JWT_SECRET", "test_jwt_secret");
+    env::set_var("JWT_SECRET", "test_jwt_secret_32_bytes_minimum_val");
     assert!(
         Config::from_env().is_err(),
         "Config should fail with empty SERVER_SECRET"
@@ -84,7 +84,7 @@ fn test_config_empty_secrets() {
         "Config should fail with whitespace SERVER_SECRET"
     );
 
-    env::set_var("SERVER_SECRET", "test_server_secret");
+    env::set_var("SERVER_SECRET", "test_secret_32_bytes_long_minimum_val");
     env::set_var("JWT_SECRET", "");
     assert!(
         Config::from_env().is_err(),
@@ -99,11 +99,36 @@ fn test_config_empty_secrets() {
 }
 
 #[test]
-fn test_config_invalid_port() {
-    let _lock = ENV_MUTEX.lock().unwrap();
+fn test_config_short_secrets() {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
-    env::set_var("SERVER_SECRET", "test_server_secret");
-    env::set_var("JWT_SECRET", "test_jwt_secret");
+    // SERVER_SECRET shorter than 32 characters
+    env::set_var("SERVER_SECRET", "short_secret_under_32");
+    env::set_var("JWT_SECRET", "test_jwt_secret_32_bytes_minimum_val");
+    let res = Config::from_env();
+    assert!(res.is_err());
+    assert_eq!(
+        res.unwrap_err(),
+        AppError::Internal("SERVER_SECRET must be at least 32 characters".to_string())
+    );
+
+    // JWT_SECRET shorter than 32 characters
+    env::set_var("SERVER_SECRET", "test_secret_32_bytes_long_minimum_val");
+    env::set_var("JWT_SECRET", "short_jwt_secret_under_32");
+    let res2 = Config::from_env();
+    assert!(res2.is_err());
+    assert_eq!(
+        res2.unwrap_err(),
+        AppError::Internal("JWT_SECRET must be at least 32 characters".to_string())
+    );
+}
+
+#[test]
+fn test_config_invalid_port() {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+    env::set_var("SERVER_SECRET", "test_secret_32_bytes_long_minimum_val");
+    env::set_var("JWT_SECRET", "test_jwt_secret_32_bytes_minimum_val");
     env::set_var("PORT", "not_a_number");
 
     let result = Config::from_env();
@@ -137,7 +162,7 @@ async fn test_app_error_into_response() {
         (
             AppError::Internal("Database connection failed".to_string()),
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Database connection failed",
+            "Internal server error",
         ),
     ];
 
@@ -158,4 +183,14 @@ async fn test_app_error_into_response() {
             expected_msg
         );
     }
+}
+
+#[test]
+fn test_sqlx_error_conversion() {
+    let sqlx_err = sqlx::Error::RowNotFound;
+    let app_err = AppError::from(sqlx_err);
+    assert_eq!(
+        app_err,
+        AppError::Internal("Internal database error".to_string())
+    );
 }

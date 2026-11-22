@@ -60,6 +60,32 @@ async fn test_health_endpoint() {
 }
 
 #[tokio::test]
+async fn test_cors_exposed_headers() {
+    let app = setup_test_app().await;
+
+    let req = Request::builder()
+        .uri("/api/health")
+        .method("GET")
+        .header(header::ORIGIN, "http://example.com")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let expose = response
+        .headers()
+        .get(header::ACCESS_CONTROL_EXPOSE_HEADERS)
+        .expect("access-control-expose-headers header should be present")
+        .to_str()
+        .unwrap()
+        .to_ascii_lowercase();
+
+    assert!(expose.contains("etag"));
+    assert!(expose.contains("if-match"));
+    assert!(expose.contains("if-none-match"));
+}
+
+#[tokio::test]
 async fn test_e2e_full_client_lifecycle() {
     let app = setup_test_app().await;
 

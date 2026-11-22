@@ -14,8 +14,10 @@ fn test_fake_salt_deterministic_and_unique() {
     let secret = b"super_secret_server_hmac_key_12345";
     let salt1 = generate_fake_salt(secret, "user@example.com");
     let salt2 = generate_fake_salt(secret, "user@example.com");
+    let salt_unnormalized = generate_fake_salt(secret, "  USER@EXAMPLE.COM  ");
     let salt3 = generate_fake_salt(secret, "other@example.com");
     assert_eq!(salt1, salt2);
+    assert_eq!(salt1, salt_unnormalized);
     assert_ne!(salt1, salt3);
     assert_eq!(
         BASE64_STANDARD.decode(&salt1).unwrap().len(),

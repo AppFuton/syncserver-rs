@@ -39,7 +39,13 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::PreconditionFailed(msg) => (StatusCode::PRECONDITION_FAILED, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            AppError::Internal(msg) => {
+                tracing::error!("{msg}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
+            }
         };
 
         let body = Json(json!({
@@ -52,7 +58,8 @@ impl IntoResponse for AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
-        AppError::Internal(err.to_string())
+        tracing::error!("{err}");
+        AppError::Internal("Internal database error".to_string())
     }
 }
 

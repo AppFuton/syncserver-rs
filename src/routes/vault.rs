@@ -77,17 +77,17 @@ pub async fn get_vault_sync_handler(
     auth_user: AuthUser,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let snapshot = state
+    let meta = state
         .repo
-        .get_vault_snapshot(&auth_user.user_id)
+        .get_vault_snapshot_meta(&auth_user.user_id)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let etag_value = format!("\"{}\"", snapshot.version);
+    let etag_value = format!("\"{}\"", meta.version);
 
     if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
         if let Ok(val) = if_none_match.to_str() {
-            if matches_etag(val, snapshot.version) {
+            if matches_etag(val, meta.version) {
                 return Response::builder()
                     .status(StatusCode::NOT_MODIFIED)
                     .header(header::ETAG, etag_value)
@@ -96,6 +96,12 @@ pub async fn get_vault_sync_handler(
             }
         }
     }
+
+    let snapshot = state
+        .repo
+        .get_vault_snapshot(&auth_user.user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
 
     Response::builder()
         .status(StatusCode::OK)
@@ -129,14 +135,17 @@ pub async fn get_vault_sync_meta_handler(
     State(state): State<AppState>,
     auth_user: AuthUser,
 ) -> Result<Json<VaultSyncMetaResponse>, AppError> {
-    let snapshot = state.repo.get_vault_snapshot(&auth_user.user_id).await?;
+    let meta = state
+        .repo
+        .get_vault_snapshot_meta(&auth_user.user_id)
+        .await?;
 
-    match snapshot {
-        Some(s) => Ok(Json(VaultSyncMetaResponse {
+    match meta {
+        Some(m) => Ok(Json(VaultSyncMetaResponse {
             exists: true,
-            version: Some(s.version),
-            updated_at: Some(s.updated_at),
-            size_bytes: s.encrypted_blob.len(),
+            version: Some(m.version),
+            updated_at: Some(m.updated_at),
+            size_bytes: m.size_bytes as usize,
         })),
         None => Ok(Json(VaultSyncMetaResponse {
             exists: false,

@@ -346,8 +346,65 @@ async fn test_register_invalid_payload() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&payload2).unwrap()))
         .unwrap();
-    let res2 = app.oneshot(req2).await.unwrap();
+    let res2 = app.clone().oneshot(req2).await.unwrap();
     assert_eq!(res2.status(), StatusCode::BAD_REQUEST);
+
+    // KDF validation: memory < 1024
+    let payload_low_mem = json!({
+        "email": "test@example.com",
+        "client_auth_key": "valid_key",
+        "kdf_salt": "c2FsdA==",
+        "wrapped_vault_key": "v1.iv.cipher",
+        "kdf_memory_kb": 512
+    });
+    let req3 = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload_low_mem).unwrap()))
+        .unwrap();
+    let res3 = app.clone().oneshot(req3).await.unwrap();
+    assert_eq!(res3.status(), StatusCode::BAD_REQUEST);
+    let json3 = parse_json_response(res3).await;
+    assert_eq!(json3["error"], "Invalid KDF parameters");
+
+    // KDF validation: iterations < 1
+    let payload_low_iter = json!({
+        "email": "test@example.com",
+        "client_auth_key": "valid_key",
+        "kdf_salt": "c2FsdA==",
+        "wrapped_vault_key": "v1.iv.cipher",
+        "kdf_iterations": 0
+    });
+    let req4 = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload_low_iter).unwrap()))
+        .unwrap();
+    let res4 = app.clone().oneshot(req4).await.unwrap();
+    assert_eq!(res4.status(), StatusCode::BAD_REQUEST);
+    let json4 = parse_json_response(res4).await;
+    assert_eq!(json4["error"], "Invalid KDF parameters");
+
+    // KDF validation: parallelism < 1
+    let payload_low_par = json!({
+        "email": "test@example.com",
+        "client_auth_key": "valid_key",
+        "kdf_salt": "c2FsdA==",
+        "wrapped_vault_key": "v1.iv.cipher",
+        "kdf_parallelism": 0
+    });
+    let req5 = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload_low_par).unwrap()))
+        .unwrap();
+    let res5 = app.oneshot(req5).await.unwrap();
+    assert_eq!(res5.status(), StatusCode::BAD_REQUEST);
+    let json5 = parse_json_response(res5).await;
+    assert_eq!(json5["error"], "Invalid KDF parameters");
 }
 
 #[tokio::test]
@@ -367,7 +424,84 @@ async fn test_rotate_password_requires_auth_and_valid_body() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&payload).unwrap()))
         .unwrap();
-    let res = app.oneshot(req).await.unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // Register user first to get token
+    let reg_payload = json!({
+        "email": "rotator@example.com",
+        "client_auth_key": "old_auth_key",
+        "kdf_salt": "c2FsdF9vcmlnaW5hbF8xNg==",
+        "wrapped_vault_key": "v1.iv.cipher"
+    });
+    let reg_req = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&reg_payload).unwrap()))
+        .unwrap();
+    let reg_res = app.clone().oneshot(reg_req).await.unwrap();
+    let reg_json = parse_json_response(reg_res).await;
+    let token = reg_json["token"].as_str().unwrap();
+
+    // Invalid new_kdf_memory_kb < 1024
+    let rotate_bad_mem = json!({
+        "old_client_auth_key": "old_auth_key",
+        "new_client_auth_key": "new_auth_key",
+        "new_kdf_salt": "bmV3X3NhbHQ=",
+        "new_kdf_memory_kb": 256,
+        "new_wrapped_vault_key": "v1.iv.cipher"
+    });
+    let req_mem = Request::builder()
+        .uri("/api/auth/rotate-password")
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&rotate_bad_mem).unwrap()))
+        .unwrap();
+    let res_mem = app.clone().oneshot(req_mem).await.unwrap();
+    assert_eq!(res_mem.status(), StatusCode::BAD_REQUEST);
+    let json_mem = parse_json_response(res_mem).await;
+    assert_eq!(json_mem["error"], "Invalid KDF parameters");
+
+    // Invalid new_kdf_iterations < 1
+    let rotate_bad_iter = json!({
+        "old_client_auth_key": "old_auth_key",
+        "new_client_auth_key": "new_auth_key",
+        "new_kdf_salt": "bmV3X3NhbHQ=",
+        "new_kdf_iterations": 0,
+        "new_wrapped_vault_key": "v1.iv.cipher"
+    });
+    let req_iter = Request::builder()
+        .uri("/api/auth/rotate-password")
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&rotate_bad_iter).unwrap()))
+        .unwrap();
+    let res_iter = app.clone().oneshot(req_iter).await.unwrap();
+    assert_eq!(res_iter.status(), StatusCode::BAD_REQUEST);
+    let json_iter = parse_json_response(res_iter).await;
+    assert_eq!(json_iter["error"], "Invalid KDF parameters");
+
+    // Invalid new_kdf_parallelism < 1
+    let rotate_bad_par = json!({
+        "old_client_auth_key": "old_auth_key",
+        "new_client_auth_key": "new_auth_key",
+        "new_kdf_salt": "bmV3X3NhbHQ=",
+        "new_kdf_parallelism": 0,
+        "new_wrapped_vault_key": "v1.iv.cipher"
+    });
+    let req_par = Request::builder()
+        .uri("/api/auth/rotate-password")
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&rotate_bad_par).unwrap()))
+        .unwrap();
+    let res_par = app.oneshot(req_par).await.unwrap();
+    assert_eq!(res_par.status(), StatusCode::BAD_REQUEST);
+    let json_par = parse_json_response(res_par).await;
+    assert_eq!(json_par["error"], "Invalid KDF parameters");
 }
 
