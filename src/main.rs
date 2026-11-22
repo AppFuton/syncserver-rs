@@ -1,5 +1,9 @@
+use std::sync::Arc;
 use syncserver_rs::config::Config;
+use syncserver_rs::db::init_repository;
 use syncserver_rs::error::AppError;
+use syncserver_rs::routes::create_router;
+use syncserver_rs::AppState;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -14,5 +18,10 @@ async fn main() -> Result<(), AppError> {
         config.database_url
     );
 
+    let repo = init_repository(&config.database_url).await?;
+    let state = AppState::new(Arc::new(config), repo);
+    let _app = create_router(state);
+
     Ok(())
 }
+
